@@ -1,6 +1,8 @@
 # SARSense
 Dedicated to Noah Woods & all missing children, I hope this helps bring you home.
 
+![SARSense](https://github.com/DansDesigns/sarsense/blob/main/Screenshots-from-demo/Screenshot%202026-09-17%20134314.png)
+
 Wi-Fi sensing for search and rescue. Cheap ESP32 boards listen to how Wi-Fi signals change as people move or breathe, a small hub turns that into positions on a map, and anyone on the network can follow along in a phone browser.
 
 People found inside a **tagging zone** get an anonymous ID like `U007`. Responders who register on their phone show up by name instead, so a volunteer walking the area is not mistaken for a missing person.
