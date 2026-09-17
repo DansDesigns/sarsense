@@ -5,3 +5,4 @@ wheels/
 firmware/esp32_csi_node/build/
 firmware/esp32_csi_node/sdkconfig
 firmware/esp32_csi_node/sdkconfig.old
+/ftdi-drivers
