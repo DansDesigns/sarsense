@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+sarsense-data/
+wheels/
+firmware/esp32_csi_node/build/
+firmware/esp32_csi_node/sdkconfig
+firmware/esp32_csi_node/sdkconfig.old

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F25C05">
+<title>SARSense</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div id="map" aria-label="Search area map"></div>
+
+<div id="tally" aria-live="polite">
+  <button type="button" class="tally-cell unknown" data-goto="unknowns"><b id="c-unknown">0</b><span>unknown</span></button>
+  <button type="button" class="tally-cell lost" data-goto="unknowns"><b id="c-lost">0</b><span>lost contact</span></button>
+  <button type="button" class="tally-cell known" data-goto="users"><b id="c-users">0</b><span>users active</span></button>
+  <button type="button" class="tally-cell stations" data-goto="stations"><b id="c-stations">0</b><span>stations up</span></button>
+</div>
+
+<div id="drawbar" hidden>
+  <span id="drawhint">Tap the map to add corners</span>
+  <button id="draw-undo" type="button">Undo</button>
+  <button id="draw-finish" type="button" class="primary">Finish zone</button>
+  <button id="draw-cancel" type="button">Cancel</button>
+</div>
+
+<aside id="panel" data-open="true">
+  <button id="grip" type="button" aria-label="Show or hide panel"><span></span></button>
+  <header>
+    <div class="hubline">
+      <strong>SARSense</strong>
+      <span id="hubstatus" class="status">Connecting</span>
+    </div>
+    <nav role="tablist">
+      <button role="tab" data-tab="unknowns" aria-selected="true">Unknowns <span class="count" id="n-unknowns"></span></button>
+      <button role="tab" data-tab="users">Users <span class="count" id="n-users"></span></button>
+      <button role="tab" data-tab="stations">Stations <span class="count" id="n-stations"></span></button>
+      <button role="tab" data-tab="zones">Zones</button>
+      <button role="tab" data-tab="hub">Hub</button>
+    </nav>
+  </header>
+
+  <!-- Unknowns: everyone detected who is not a registered user -->
+  <section id="tab-unknowns" class="tab">
+    <div class="filters">
+      <label><input type="checkbox" id="f-motion"> Include motion outside tagging zones</label>
+      <label><input type="checkbox" id="f-closed"> Show found and dismissed</label>
+    </div>
+    <ol id="unknownlist" class="cards"></ol>
+    <p id="unknowns-empty" class="empty">Nobody unknown detected. People found inside a tagging zone appear here with an ID like U001.</p>
+  </section>
+
+  <!-- Users: responders and helpers with the app -->
+  <section id="tab-users" class="tab" hidden>
+    <div class="mebox">
+      <div id="me-new">
+        <h3>Join as a user</h3>
+        <p class="hint">Register so the map shows you by name, not as an unknown person.</p>
+        <label class="field">Your name<input id="me-name" autocomplete="name" maxlength="40"></label>
+        <label class="field">Team<input id="me-team" maxlength="40" placeholder="Optional"></label>
+        <button type="button" class="primary" id="btn-register">Register</button>
+      </div>
+      <div id="me-reg" hidden>
+        <h3>You: <span id="me-label"></span></h3>
+        <p id="me-pos" class="hint">Position not shared yet.</p>
+        <div class="row">
+          <button type="button" class="primary" id="btn-gps">Share my location</button>
+          <button type="button" id="btn-tap">Tap map to set position</button>
+        </div>
+        <p class="hint">Location sharing needs the hub to be opened over https. Without it, tap the map and repeat when you move.</p>
+        <button type="button" id="btn-signout" class="quiet">Sign out on this phone</button>
+      </div>
+    </div>
+    <h3>All users</h3>
+    <ul id="userlist" class="plain rows"></ul>
+  </section>
+
+  <!-- Stations: sensors, routers and other transmitters -->
+  <section id="tab-stations" class="tab" hidden>
+    <p class="locked-note" data-locked>Unlock operator mode on the Hub tab to place or rename stations.</p>
+    <p id="station-summary" class="summary"></p>
+    <div id="stationlist"></div>
+    <h3>Calibration</h3>
+    <p class="hint">Run this while nobody is moving near the stations. The hub learns what an empty area looks like.</p>
+    <div class="row"><button type="button" data-op id="btn-calibrate">Calibrate for 30 seconds</button></div>
+    <h3>Links</h3>
+    <p class="hint">Each line is one station hearing one transmitter. Select a link to see its recent signal.</p>
+    <div id="linkchart" hidden>
+      <canvas width="320" height="80"></canvas>
+      <p id="linkinfo"></p>
+      <button type="button" data-op id="btn-mute">Mute this link</button>
+    </div>
+    <ul id="linklist" class="plain links"></ul>
+  </section>
+
+  <!-- Zones -->
+  <section id="tab-zones" class="tab" hidden>
+    <p class="locked-note" data-locked>Unlock operator mode on the Hub tab to change zones.</p>
+    <div class="row">
+      <button type="button" data-op id="btn-zone-tag" class="primary">Draw tagging zone</button>
+      <button type="button" data-op id="btn-zone-ignore">Draw ignore zone</button>
+    </div>
+    <p class="hint">People detected inside a tagging zone get an ID. Ignore zones hide detections, for example a busy road or the rescue base.</p>
+    <ul id="zonelist" class="plain rows"></ul>
+  </section>
+
+  <!-- Hub -->
+  <section id="tab-hub" class="tab" hidden>
+    <div id="op-lock">
+      <label class="field">Operator PIN<input id="pin" type="password" inputmode="numeric" autocomplete="current-password"></label>
+      <button type="button" class="primary" id="btn-unlock">Unlock operator mode</button>
+    </div>
+    <div id="op-unlocked" hidden>
+      <p>Operator mode is on for this browser.</p>
+      <div class="row">
+        <button type="button" id="btn-saveview">Use current map view as default</button>
+        <button type="button" id="btn-lock">Lock</button>
+      </div>
+    </div>
+    <h3>Status</h3>
+    <dl id="stats" class="stats"></dl>
+    <h3>Activity</h3>
+    <ol id="events" class="events"></ol>
+    <p><a href="/api/log.csv" download>Download event log (CSV)</a></p>
+  </section>
+</aside>
+
+<dialog id="dlg">
+  <form method="dialog">
+    <h3 id="dlg-title"></h3>
+    <label class="field"><span id="dlg-label"></span><input id="dlg-input" maxlength="120"></label>
+    <div class="row end">
+      <button value="cancel" type="submit">Cancel</button>
+      <button value="ok" type="submit" class="primary" id="dlg-ok">Save</button>
+    </div>
+  </form>
+</dialog>
+<div id="toast" role="status" hidden></div>
+
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

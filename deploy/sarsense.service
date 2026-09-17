@@ -1,0 +1,16 @@
+# For systemd distributions (for example Armbian). Devuan users: see sarsense.init.
+[Unit]
+Description=SARSense Wi-Fi sensing hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=sarsense
+WorkingDirectory=/opt/sarsense
+ExecStart=/usr/bin/python3 -m sarsense --config /etc/sarsense/sarsense.json
+Restart=always
+RestartSec=3
+MemoryMax=300M
+
+[Install]
+WantedBy=multi-user.target

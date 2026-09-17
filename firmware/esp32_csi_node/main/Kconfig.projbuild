@@ -1,0 +1,39 @@
+menu "SARSense node"
+
+config SARS_WIFI_SSID
+    string "Wi-Fi network name"
+    default "sarsense"
+
+config SARS_WIFI_PASSWORD
+    string "Wi-Fi password"
+    default ""
+
+config SARS_HUB_IP
+    string "Hub IP address (empty = find the hub by broadcast)"
+    default ""
+
+config SARS_HUB_PORT
+    int "Hub UDP port"
+    default 5566
+
+config SARS_TX_HZ
+    int "Sensing packets per second this node sends"
+    range 1 100
+    default 20
+    help
+        The node pings its router this often. Other nodes measure CSI on the
+        outgoing frames and this node measures CSI on the router's replies.
+
+config SARS_MAX_HZ
+    int "Most CSI reports per second per transmitter"
+    range 1 100
+    default 25
+    help
+        A busy router sends hundreds of frames a second. Anything above this
+        rate is not forwarded, which keeps the hub and the network calm.
+
+config SARS_PING_GATEWAY
+    bool "Ping the router to generate sensing traffic"
+    default y
+
+endmenu

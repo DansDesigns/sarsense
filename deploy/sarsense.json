@@ -1,0 +1,11 @@
+{
+  "hub_id": "A",
+  "data_dir": "/var/lib/sarsense",
+  "http_port": 8080,
+  "udp_port": 5566,
+  "pin": "change-me",
+  "upstream": "",
+  "fed_key": "",
+  "max_links": 48,
+  "tick_hz": 2.0
+}
