@@ -32,7 +32,9 @@ Needs Python 3.9 or newer. The installer puts everything in a `.venv` folder ins
 
 `install.sh` also adds *SARSense Hub*, *SARSense Demo* and *SARSense Web App* to the desktop's app menu (under Internet or Network). The hub and demo open in a terminal window that stays open after they stop, so any error can be read. Entries go in `~/.local/share/applications`, or `/usr/local/share/applications` when run as root. They point at the project folder, so run `./install.sh` again if you move it.
 
-**Windows:** install Python from python.org, then double-click `install.bat`. It adds a **SARSense** folder to the Start menu with *SARSense Hub*, *SARSense Demo*, *Open SARSense* (the web app), the project folder, and *Remove SARSense shortcuts*. `run_hub.bat` and `run_demo.bat` in the folder do the same as the shortcuts and call the installer themselves if `.venv` is missing. When Windows asks, allow Python through the firewall on private networks (UDP 5566 for sensors, TCP 8080 for phones).
+**Windows:** 
+
+install Python from python.org, then double-click `install.bat`. It adds a **SARSense** folder to the Start menu with *SARSense Hub*, *SARSense Demo*, *Open SARSense* (the web app), the project folder, and *Remove SARSense shortcuts*. `run_hub.bat` and `run_demo.bat` in the folder do the same as the shortcuts and call the installer themselves if `.venv` is missing. When Windows asks, allow Python through the firewall on private networks (UDP 5566 for sensors, TCP 8080 for phones).
 
 For the demo, open <http://localhost:8080> and unlock operator mode with PIN `1234` on the Hub tab. The simulator places 6 sensors and a router, draws a zone, walks two people around (one of them a registered responder) and leaves one person lying still near a sensor link.
 
