@@ -69,6 +69,7 @@ static bool s_hub_known;
 static int64_t s_hub_heard_us;
 static uint32_t s_seq, s_dropped;
 static esp_ping_handle_t s_ping;
+static char s_name[32];          /* the name the hub gives this node */
 
 /* ------------------------------------------------------------- CSI intake */
 
@@ -205,6 +206,18 @@ static void handle_peers(const uint8_t *buf, int len, const struct sockaddr_in *
     if (count > MAX_PEERS || len < 13 + count * 6) {
         return;
     }
+    int tail = 13 + count * 6;
+    if (len > tail) {                       /* the hub also sends this node's name */
+        int nl = buf[tail];
+        if (nl > 0 && nl < (int)sizeof(s_name) && len >= tail + 1 + nl) {
+            char nm[sizeof(s_name)] = {0};
+            memcpy(nm, buf + tail + 1, nl);
+            if (strcmp(nm, s_name) != 0) {
+                strlcpy(s_name, nm, sizeof(s_name));
+                ESP_LOGI(TAG, "the hub calls this node \"%s\"", s_name);
+            }
+        }
+    }
     wifi_ap_record_t ap;
     bool have_ap = esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
 
@@ -260,7 +273,7 @@ static void net_task(void *arg)
     open_socket();
     int64_t last_hello = 0, last_stats = 0;
     csi_item_t it;
-    uint8_t rx[16 + MAX_PEERS * 6];
+    uint8_t rx[64 + MAX_PEERS * 6];   /* peers plus this node's name */
 
     for (;;) {
         /* drain queued CSI; only once we know where the hub is */
@@ -292,8 +305,8 @@ static void net_task(void *arg)
         }
         if (now - last_stats > 60000000) {
             last_stats = now;
-            ESP_LOGI(TAG, "sent %" PRIu32 " reports, dropped %" PRIu32 ", free heap %" PRIu32,
-                     s_seq, s_dropped, esp_get_free_heap_size());
+            ESP_LOGI(TAG, "%s: sent %" PRIu32 " reports, dropped %" PRIu32 ", free heap %" PRIu32,
+                     s_name[0] ? s_name : "unnamed", s_seq, s_dropped, esp_get_free_heap_size());
         }
     }
 }
@@ -381,7 +394,9 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
-    esp_wifi_get_mac(WIFI_IF_STA, s_self);
+    if (esp_read_mac(s_self, ESP_MAC_WIFI_STA) != ESP_OK) {
+        ESP_ERROR_CHECK(esp_wifi_get_mac(WIFI_IF_STA, s_self));
+    }
     ESP_LOGI(TAG, "node " MACSTR " firmware " FW_VERSION, MAC2STR(s_self));
     start_csi();
 

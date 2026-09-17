@@ -18,6 +18,8 @@ let focus = null;                // {tab, key} of the row to highlight
 let placing = null;              // {kind: "device"|"user", id}
 let selectedLink = null;
 let draw = null;                 // {type, points}
+let pendingAlert = null;         // an alert waiting for a position
+let seenAlerts = new Set();
 let fitted = false;
 
 const ONLINE_S = 15;
@@ -26,14 +28,25 @@ const QUIET_S = 60;
 /* ------------------------------------------------------------------ map */
 const map = L.map("map", {zoomControl: false, attributionControl: true, maxZoom: 21});
 L.control.zoom({position: "bottomleft"}).addTo(map);
-L.tileLayer("/tiles/{z}/{x}/{y}.png", {
-  maxZoom: 21, maxNativeZoom: 19,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-}).addTo(map);
+const baseLayers = {
+  Map: L.tileLayer("/tiles/map/{z}/{x}/{y}.png", {
+    maxZoom: 21, maxNativeZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  }),
+  Satellite: L.tileLayer("/tiles/sat/{z}/{x}/{y}.png", {
+    maxZoom: 21, maxNativeZoom: 19,
+    attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics and the GIS user community',
+  }),
+};
+const savedBase = store.get("sar.base") === "Satellite" ? "Satellite" : "Map";
+baseLayers[savedBase].addTo(map);
+L.control.layers(baseLayers, null, {position: "bottomleft"}).addTo(map);
+map.on("baselayerchange", (e) => store.set("sar.base", e.name));
 map.setView([50.68, -3.47], 5);
 
 const layers = {
   zones: L.layerGroup().addTo(map),
+  alerts: L.layerGroup().addTo(map),
   links: L.layerGroup().addTo(map),
   stations: L.layerGroup().addTo(map),
   users: L.layerGroup().addTo(map),
@@ -174,13 +187,14 @@ function render() {
   ns.title = down ? `${down} station${down === 1 ? "" : "s"} not responding` : "";
 
   drawZones();
+  drawAlerts();
   drawStations();
   drawUsers();
   drawTracks();
 
   // only the visible tab builds its list, which keeps old phones responsive
   if (tab === "unknowns") renderUnknowns();
-  if (tab === "users") renderUsers();
+  if (tab === "users") { renderUsers(); renderAlerts(); }
   if (tab === "stations") renderStations();
   if (tab === "zones") renderZones();
   if (tab === "hub") { renderStats(); renderEvents(); }
@@ -343,10 +357,101 @@ async function trackAction(t, a) {
   run(async () => { await api("POST", `/api/tracks/${t.id}`, body); toast(`${t.label} updated`); });
 }
 
+
+/* ------------------------------------------------------------------ alerts */
+const ALERT_WORDS = {found: "found someone", help: "needs help", hazard: "hazard", note: "marked a spot"};
+const liveAlerts = () => (S.alerts || []).filter((a) => a.status !== "cleared");
+
+function beep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = 880; o.connect(g); g.connect(ctx.destination);
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
+    o.start(); o.stop(ctx.currentTime + 0.5);
+    setTimeout(() => ctx.close(), 800);
+  } catch (e) { /* audio needs a tap on some phones; the bar still shows */ }
+}
+
+function drawAlerts() {
+  const seen = new Set();
+  const list = liveAlerts();
+  for (const a of list) {
+    const cls = a.status === "new" ? "mk-alert" : "mk-alert acked";
+    upsertMarker(layers.alerts, "a:" + a.id, [a.lat, a.lon],
+      `<div class="mk-wrap" style="width:26px;height:26px"><div class="mk ${cls}">!</div><span class="mk-label alert">${esc(a.who)}</span></div>`,
+      26, () => focusRow("users", a.id), seen);
+  }
+  sweepMarkers("a:", seen);
+
+  const fresh = list.filter((a) => a.status === "new" && !seenAlerts.has(a.id) && S.now - a.t < 120);
+  list.forEach((a) => seenAlerts.add(a.id));
+  if (fresh.length) beep();
+
+  const news = list.filter((a) => a.status === "new").sort((x, y) => y.t - x.t);
+  const bar = $("#alertbar");
+  bar.hidden = news.length === 0;
+  if (!news.length) return;
+  const a = news[0];
+  $("#alerttext").textContent = `${a.who} ${ALERT_WORDS[a.kind] || a.kind}${a.text ? `: ${a.text}` : ""} (${ago(a.t)}${a.remote ? `, hub ${a.hub}` : ""})`;
+  $("#alert-jump").onclick = () => centre(a.lat, a.lon);
+  $("#alert-ack").hidden = !!a.remote;
+  $("#alert-ack").onclick = () => run(() => api("POST", `/api/alerts/${a.id}`, {action: "ack"}));
+  const more = $("#alert-more");
+  more.hidden = news.length < 2;
+  more.textContent = `${news.length - 1} more`;
+  more.onclick = () => { showTab("users"); render(); };
+}
+
+function renderAlerts() {
+  const ul = $("#alertlist");
+  const list = liveAlerts().sort((x, y) => (x.status === "new" ? 0 : 1) - (y.status === "new" ? 0 : 1) || y.t - x.t);
+  ul.innerHTML = list.length ? "" : `<li class="hint">No alerts. Users can raise one from their phone.</li>`;
+  for (const a of list) {
+    const li = document.createElement("li");
+    li.dataset.key = a.id;
+    li.className = (focused("users", a.id) ? "focus " : "") + (a.status === "new" ? "alert-new" : "");
+    li.innerHTML = `<span class="dot ${a.status === "new" ? "st-offline" : "st-quiet"}"></span>
+      <span class="grow"><strong>${esc(a.who)} ${esc(ALERT_WORDS[a.kind] || a.kind)}</strong>
+      <small>${clock(a.t)}, ${ago(a.t)}${a.remote ? `, hub ${esc(a.hub)}` : ""}${a.status === "ack" ? ", acknowledged" : ""}${a.text ? `<br>${esc(a.text)}` : ""}</small></span>
+      <span class="actions"><button type="button" data-a="jump">Jump to it</button>
+      ${a.remote ? "" : `<button type="button" data-op data-a="ack">${a.status === "new" ? "Acknowledge" : "Reopen"}</button>
+      <button type="button" data-op data-a="clear" class="danger">Clear</button>`}</span>`;
+    li.querySelectorAll("button").forEach((b) => (b.onclick = () => {
+      if (b.dataset.a === "jump") { centre(a.lat, a.lon); return; }
+      const action = b.dataset.a === "clear" ? "clear" : a.status === "new" ? "ack" : "reopen";
+      run(() => api("POST", `/api/alerts/${a.id}`, {action}));
+    }));
+    ul.appendChild(li);
+  }
+}
+
+async function sendAlert(kind) {
+  if (!me) return;
+  const text = await ask(`${ALERT_WORDS[kind][0].toUpperCase()}${ALERT_WORDS[kind].slice(1)}`,
+                         "Anything the hub should know (optional)", "");
+  if (text === null) return;
+  const p = S.people.find((x) => x.id === me.id);
+  if (p && p.lat != null && p.fresh) {
+    run(async () => {
+      await api("POST", "/api/alerts", {kind, text, lat: p.lat, lon: p.lon, person: me.id});
+      toast("Alert sent to the hub");
+    });
+    return;
+  }
+  pendingAlert = {kind, text};
+  toast("Tap the map where you are, and the alert goes with it");
+  collapsePanelOnPhone();
+}
+document.querySelectorAll("[data-alert]").forEach((b) => (b.onclick = () => sendAlert(b.dataset.alert)));
+
 /* --------------------------------------------------------------- Users tab */
 function renderMe() {
   $("#me-new").hidden = !!me;
   $("#me-reg").hidden = !me;
+  $("#me-alerts").hidden = !me;
   if (!me) return;
   $("#me-label").textContent = me.name + (me.team ? `, ${me.team}` : "");
   if (!S) return;
@@ -704,6 +809,16 @@ $("#btn-saveview").onclick = () => run(async () => {
 map.on("click", (e) => {
   const {lat, lng} = e.latlng;
   if (draw) { draw.points.push([lat, lng]); redrawDraft(); return; }
+  if (pendingAlert) {
+    const a = pendingAlert;
+    pendingAlert = null;
+    run(async () => {
+      await api("POST", "/api/alerts", {kind: a.kind, text: a.text, lat, lon: lng, person: me && me.id});
+      await api("POST", `/api/people/${me.id}/checkin`, {lat, lon: lng}).catch(() => {});
+      toast("Alert sent to the hub");
+    });
+    return;
+  }
   if (!placing) { focus = null; return; }
   const p = placing;
   placing = null;

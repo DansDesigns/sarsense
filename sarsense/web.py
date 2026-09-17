@@ -63,10 +63,13 @@ class WebServer:
             ("DELETE", r"/api/people/(?P<pid>[\w-]+)", self.delete_person),
             ("POST", r"/api/people/(?P<pid>[\w-]+)/checkin", self.post_checkin),
             ("POST", r"/api/tracks/(?P<tid>[\w-]+)", self.post_track),
+            ("POST", r"/api/alerts", self.post_alert),
+            ("POST", r"/api/alerts/(?P<aid>[\w-]+)", self.post_alert_action),
             ("POST", r"/api/calibrate", self.post_calibrate),
             ("POST", r"/api/links/mute", self.post_mute),
             ("POST", r"/api/view", self.post_view),
             ("POST", r"/api/federate", self.post_federate),
+            ("GET", r"/tiles/(?P<layer>map|sat)/(?P<z>\d+)/(?P<x>\d+)/(?P<y>\d+)\.png", self.get_tile),
             ("GET", r"/tiles/(?P<z>\d+)/(?P<x>\d+)/(?P<y>\d+)\.png", self.get_tile),
         ]
         self.routes = [(m, re.compile(p + "$"), h) for m, p, h in self.routes]
@@ -280,6 +283,33 @@ class WebServer:
             raise HttpError(404, "Track not found")
         return t.public()
 
+    def post_alert(self, req):
+        """Anyone helping can raise an alert; it does not need the PIN."""
+        b = req.json()
+        try:
+            lat, lon = float(b["lat"]), float(b["lon"])
+        except (KeyError, TypeError, ValueError):
+            raise HttpError(400, "lat and lon are required")
+        person = b.get("person")
+        if person and person not in self.hub.store.people:
+            person = None
+        a = self.hub.store.add_alert(b.get("kind", "note"), lat, lon, b.get("text", ""), person, self.cfg.hub_id)
+        self.hub.store.append_log({"t": a["t"], "kind": "alert", "track": a["id"],
+                                   "label": a["who"], "lat": round(lat, 6), "lon": round(lon, 6),
+                                   "text": f"{a['who']}: {self.hub.store.ALERT_KINDS[a['kind']]}. {a['text']}".strip()})
+        log.info("alert from %s: %s %s", a["who"], a["kind"], a["text"])
+        return a
+
+    def post_alert_action(self, req, aid):
+        self.require_pin(req)
+        action = req.json().get("action", "")
+        if action not in ("ack", "clear", "reopen"):
+            raise HttpError(400, "action must be ack, clear or reopen")
+        a = self.hub.store.set_alert(aid, {"ack": "ack", "clear": "cleared", "reopen": "new"}[action])
+        if a is None:
+            raise HttpError(404, "Alert not found")
+        return a
+
     def post_calibrate(self, req):
         self.require_pin(req)
         b = req.json()
@@ -318,17 +348,18 @@ class WebServer:
         except ValueError as e:
             raise HttpError(400, str(e))
 
-    async def get_tile(self, req, z, x, y):
+    async def get_tile(self, req, z, x, y, layer="map"):
         z, x, y = int(z), int(x), int(y)
-        if z > 19 or x >= 2 ** z or y >= 2 ** z:
+        template = self.cfg.tiles_sat if layer == "sat" else self.cfg.tiles
+        if z > 21 or x >= 2 ** z or y >= 2 ** z:
             raise HttpError(404, "Tile out of range")
-        path = os.path.join(self.tile_dir, str(z), str(x), f"{y}.png")
+        path = os.path.join(self.tile_dir, layer, str(z), str(x), f"{y}.png")
         if os.path.exists(path):
             with open(path, "rb") as f:
                 return 200, "image/png", f.read(), {"Cache-Control": "public, max-age=604800"}
-        if self.cfg.tiles_offline or not self.cfg.tiles:
+        if self.cfg.tiles_offline or not template:
             raise HttpError(404, "Tile not cached and hub is offline")
-        url = self.cfg.tiles.format(z=z, x=x, y=y)
+        url = template.format(z=z, x=x, y=y)
 
         def fetch():
             r = urllib.request.Request(url, headers={

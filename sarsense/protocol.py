@@ -33,6 +33,8 @@ All SARSense node packets are little-endian UDP datagrams:
     type 5 PEERS (hub -> node)
         B   count
         6s * count   MACs the node should forward CSI for
+        B   name length (optional, may be absent in older hubs)
+        ... the name the hub has given this node, utf-8
 """
 from __future__ import annotations
 
@@ -151,12 +153,15 @@ def parse(data: bytes):
     return None
 
 
-def build_peers(macs) -> bytes:
+def build_peers(macs, name: str = "") -> bytes:
+    """Peer list plus the name the hub has assigned this node, so a node can
+    report itself by name instead of by MAC."""
     macs = list(macs)[:32]
     out = HDR.pack(MAGIC, T_PEERS, 1, b"\0" * 6) + bytes([len(macs)])
     for m in macs:
         out += mac_bytes(m)
-    return out
+    nb = name.encode("utf-8")[:31]
+    return out + bytes([len(nb)]) + nb
 
 
 def build_csi(node: str, src: str, rssi: int, channel: int, iq_int8: np.ndarray, seq: int) -> bytes:

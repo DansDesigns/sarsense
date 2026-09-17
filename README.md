@@ -124,6 +124,10 @@ The ESP32-C5 is a preview target in ESP-IDF 5.4 (`idf.py --preview set-target es
 
 Each node joins the router, pings it about 20 times a second, and listens to every data frame on the channel. It forwards CSI from the router and from the other SARSense nodes the hub tells it about, capped at 25 reports per transmitter per second.
 
+Nodes have no name of their own. The hub hands one out the way a DHCP server hands out addresses: the first node to report in becomes *Sensor 01*, the next *Sensor 02*, and their router becomes *Router 01*. The name comes back in the hub's reply and the node prints it in the serial monitor, so the board on your bench and the row on the Stations tab always match. Rename a station on the Stations tab and the node picks the new name up within a few seconds.
+
+A node identifies itself by its Wi-Fi MAC address, read from the chip itself. If a node ever reports `00:00:00:00:00:00` the hub ignores it and says so in its log, rather than merging every such node into one station.
+
 Router settings that matter:
 - Use **20 MHz channel width**.
 - On 2.4 GHz, disable 802.11b rates if the router allows it (OpenWrt does). The ESP32 only measures CSI on OFDM frames.
@@ -136,7 +140,7 @@ The side panel (a pull-up sheet on phones) has five tabs. The tally at the top o
 | Tab | Holds |
 |---|---|
 | **Unknowns** | Everyone detected who is not a registered user: orange `U###` cards, still/breathing flags, lost contacts with last known position. Mark found, name, note or dismiss. |
-| **Users** | Your own registration and location sharing, then every registered user with when their position was shared, whether stations can currently sense them, and which unknown they are standing with. |
+| **Users** | Your own registration, location sharing and alert buttons, then the alert list and every registered user with when their position was shared, whether stations can currently sense them, and which unknown they are standing with. |
 | **Stations** | Sensors grouped under their router, plus other transmitters. Online, quiet or not responding; placed or not; links heard; signal to the router; firmware; address. Also calibration and the per-link signal view. |
 | **Zones** | Draw and delete tagging and ignore zones. |
 | **Hub** | Operator PIN, hub status, federation, activity log and CSV download. |
@@ -146,6 +150,15 @@ The side panel (a pull-up sheet on phones) has five tabs. The tally at the top o
 3. **Draw zones.** Zones tab: a *tagging zone* around the search area; *ignore zones* over roads, fans, trees or your base.
 4. **Register users.** Everyone helping opens the hub on their phone, Users tab, enters a name and shares location. Operators can also set a user's position by hand.
 5. **Watch Unknowns.** A magenta ring means *still, possibly breathing*. Naming a missing person keeps them on the Unknowns tab with their ID, because they are still someone being searched for.
+
+The map has a layer button in the bottom left corner that switches between the street map and satellite imagery. Satellite tiles come from Esri World Imagery; set `tiles_sat` to use a different source, and `tiles_offline` stops the hub fetching either kind.
+
+### Alerts from the field
+
+Anyone registered on the Users tab can send the hub an alert: *Found someone*, *Need help*, *Hazard* or *Mark this spot*, with an optional note. The alert goes out at their shared position, or they tap the map to place it.
+
+On the hub the alert shows as an orange bar across the top of any tab, a marker on the map and a line in the event log, and *Jump to it* moves the map straight there. Operators acknowledge or clear alerts from the bar or the Users tab, and alerts from sector hubs appear on the command hub too. Raising an alert needs no PIN, because the people who need it most are the ones with only a phone.
+
 
 ### How tagging decides
 

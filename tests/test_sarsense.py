@@ -46,9 +46,46 @@ class Protocol(unittest.TestCase):
         self.assertIsNone(protocol.parse(protocol.MAGIC + b"\x01"))
 
     def test_peers(self):
-        p = protocol.build_peers(["aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02"])
+        p = protocol.build_peers(["aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02"], "Sensor 03")
         self.assertEqual(p[12], 2)
-        self.assertEqual(len(p), 13 + 12)
+        self.assertEqual(len(p), 13 + 12 + 1 + len("Sensor 03"))
+        self.assertTrue(p.endswith(b"Sensor 03"))
+        self.assertEqual(len(protocol.build_peers([])), 14)
+
+
+class Stations(unittest.TestCase):
+    def test_names_are_handed_out(self):
+        from sarsense.store import Store
+        st = Store(tempfile.mkdtemp())
+        st.seen_device("aa:bb:cc:dd:ee:01", "sensor")
+        st.seen_device("aa:bb:cc:dd:ee:02", "sensor")
+        st.seen_device("11:22:33:44:55:66", "ap")
+        names = [d["name"] for d in st.devices.values()]
+        self.assertEqual(names, ["Sensor 01", "Sensor 02", "Router 01"])
+        st.devices["aa:bb:cc:dd:ee:01"]["name"] = "Front door"
+        st.seen_device("aa:bb:cc:dd:ee:01", "sensor")
+        self.assertEqual(st.devices["aa:bb:cc:dd:ee:01"]["name"], "Front door")
+
+    def test_blank_mac_is_ignored(self):
+        from sarsense.hub import Hub
+        cfg = Settings(data_dir=tempfile.mkdtemp())
+        hub = Hub(cfg)
+        pkt = protocol.build_hello("00:00:00:00:00:00", "11:22:33:44:55:66", 6, -50, 1)
+        hub.on_packet(pkt, ("10.0.0.5", 5566), None)
+        self.assertEqual(hub.store.devices, {})
+        self.assertEqual(hub.packets, 0)
+
+
+class Alerts(unittest.TestCase):
+    def test_alert_lifecycle(self):
+        from sarsense.store import Store
+        st = Store(tempfile.mkdtemp())
+        pid = st.put_person({"name": "Sam"})["id"]
+        a = st.add_alert("help", 50.1, -3.5, "leg trapped", pid, "A")
+        self.assertEqual((a["who"], a["status"]), ("Sam", "new"))
+        self.assertEqual(len(st.live_alerts()), 1)
+        st.set_alert(a["id"], "cleared")
+        self.assertEqual(st.live_alerts(), [])
 
 
 class Geometry(unittest.TestCase):

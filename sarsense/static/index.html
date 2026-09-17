@@ -21,6 +21,14 @@
   <button type="button" class="tally-cell stations" data-goto="stations"><b id="c-stations">0</b><span>stations up</span></button>
 </div>
 
+<div id="alertbar" hidden>
+  <span class="bang" aria-hidden="true">!</span>
+  <span id="alerttext" class="grow"></span>
+  <button type="button" id="alert-jump" class="primary">Jump to it</button>
+  <button type="button" id="alert-ack" data-op>Acknowledge</button>
+  <button type="button" id="alert-more" hidden></button>
+</div>
+
 <div id="drawbar" hidden>
   <span id="drawhint">Tap the map to add corners</span>
   <button id="draw-undo" type="button">Undo</button>
@@ -75,6 +83,18 @@
         <button type="button" id="btn-signout" class="quiet">Sign out on this phone</button>
       </div>
     </div>
+    <div id="me-alerts" hidden>
+      <h3>Send an alert to the hub</h3>
+      <p class="hint">The hub gets a marker at your position, a line in the log, and the operator can jump straight to it.</p>
+      <div class="row">
+        <button type="button" class="primary" data-alert="found">Found someone</button>
+        <button type="button" data-alert="help">Need help</button>
+        <button type="button" data-alert="hazard">Hazard</button>
+        <button type="button" data-alert="note">Mark this spot</button>
+      </div>
+    </div>
+    <h3>Alerts</h3>
+    <ul id="alertlist" class="plain rows"></ul>
     <h3>All users</h3>
     <ul id="userlist" class="plain rows"></ul>
   </section>

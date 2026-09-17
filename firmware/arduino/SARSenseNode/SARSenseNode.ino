@@ -31,6 +31,7 @@
 #include <WiFiUdp.h>
 #include <Preferences.h>
 #include "esp_wifi.h"
+#include "esp_mac.h"
 #include "esp_timer.h"
 #include "ping/ping_sock.h"
 #include "lwip/ip_addr.h"
@@ -83,6 +84,7 @@ static esp_ping_handle_t pingHandle = nullptr;
 static volatile bool gotIp = false;
 static volatile bool needPing = false;
 
+static char hubName[32] = "";     // the name the hub gives this node
 static Preferences prefs;
 static String cfgSsid, cfgPass, cfgHub;
 
@@ -202,6 +204,18 @@ static void handlePeers(const uint8_t *buf, int len, IPAddress from, uint16_t fr
   if (len < 13 || memcmp(buf, "SRS1", 4) != 0 || buf[4] != T_PEERS) return;
   int count = buf[12];
   if (count > MAX_PEERS || len < 13 + count * 6) return;
+  int tail = 13 + count * 6;
+  if (len > tail) {                       // the hub also sends this node's name
+    int nl = buf[tail];
+    if (nl > 0 && nl < (int)sizeof(hubName) && len >= tail + 1 + nl) {
+      char nm[32] = {0};
+      memcpy(nm, buf + tail + 1, nl);
+      if (strcmp(nm, hubName) != 0) {
+        strncpy(hubName, nm, sizeof(hubName) - 1);
+        Serial.printf("The hub calls this node \"%s\"\n", hubName);
+      }
+    }
+  }
   uint8_t *bssid = WiFi.BSSID();
 
   portENTER_CRITICAL(&lock);
@@ -293,7 +307,8 @@ static void loadSettings() {
 }
 
 static void printStatus() {
-  Serial.printf("Node %02x:%02x:%02x:%02x:%02x:%02x firmware %s\n",
+  Serial.printf("Node %s (%02x:%02x:%02x:%02x:%02x:%02x) firmware %s\n",
+                hubName[0] ? hubName : "unnamed until the hub answers",
                 selfMac[0], selfMac[1], selfMac[2], selfMac[3], selfMac[4], selfMac[5], FW_VERSION);
   Serial.printf("Wi-Fi \"%s\" %s", cfgSsid.c_str(), gotIp ? "connected" : "not connected");
   if (gotIp) Serial.printf(", address %s, channel %d, %d dBm", WiFi.localIP().toString().c_str(), WiFi.channel(), WiFi.RSSI());
@@ -355,7 +370,15 @@ void setup() {
   minGapUs = 1000000UL / SARS_MAX_HZ;
 
   WiFi.mode(WIFI_STA);
-  WiFi.macAddress(selfMac);
+  // read the MAC from the chip itself: WiFi.macAddress() can still be all
+  // zeros this early, and two nodes reporting 00:00:00:00:00:00 look like one
+  // station to the hub
+  if (esp_read_mac(selfMac, ESP_MAC_WIFI_STA) != ESP_OK || !memcmp(selfMac, "\0\0\0\0\0\0", 6)) {
+    WiFi.macAddress(selfMac);
+  }
+  if (!memcmp(selfMac, "\0\0\0\0\0\0", 6)) {
+    Serial.println("Could not read this board's MAC address. The hub cannot tell nodes apart without it.");
+  }
   loadSettings();
 
   WiFi.onEvent(onWifiEvent);
@@ -396,7 +419,7 @@ void loop() {
   if (gotIp) {
     int size = udp.parsePacket();
     if (size > 0) {
-      uint8_t rx[16 + MAX_PEERS * 6];
+      uint8_t rx[64 + MAX_PEERS * 6];   // peers plus this node's name
       int n = udp.read(rx, sizeof(rx));
       handlePeers(rx, n, udp.remoteIP(), udp.remotePort());
     }

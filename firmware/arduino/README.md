@@ -15,6 +15,8 @@ Same behaviour and packet format as the ESP-IDF version, so both kinds of node c
 
 No extra libraries are needed.
 
+The node takes its name from the hub, so nothing needs setting per board: the first one to report in is called *Sensor 01*, the next *Sensor 02*, and the serial monitor prints the name once the hub answers. Rename a station on the hub's Stations tab and the node follows within a few seconds.
+
 ## Changing settings without re-uploading
 
 Type these into the Serial Monitor. They are saved on the board and take priority over the values in the sketch.

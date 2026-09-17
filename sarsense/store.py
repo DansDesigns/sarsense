@@ -25,6 +25,7 @@ class Settings:
     upstream: str = ""
     fed_key: str = ""
     tiles: str = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    tiles_sat: str = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
     tiles_offline: bool = False
     tls_cert: str = ""
     tls_key: str = ""
@@ -67,6 +68,7 @@ class Store:
         self.zones: dict[str, dict] = {}
         self.people: dict[str, dict] = {}
         self.counters: dict[str, int] = {}
+        self.alerts: list[dict] = []
         self.view: dict = {}
         self._dirty = False
         self._load()
@@ -80,6 +82,7 @@ class Store:
         self.zones = d.get("zones", {})
         self.people = d.get("people", {})
         self.counters = d.get("counters", {})
+        self.alerts = d.get("alerts", [])
         self.view = d.get("view", {})
 
     def mark(self):
@@ -92,7 +95,8 @@ class Store:
             tmp = self.path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump({"devices": self.devices, "zones": self.zones, "people": self.people,
-                           "counters": self.counters, "view": self.view}, f, indent=1)
+                           "counters": self.counters, "view": self.view,
+                           "alerts": self.alerts[-200:]}, f, indent=1)
             os.replace(tmp, self.path)
             self._dirty = False
 
@@ -102,6 +106,19 @@ class Store:
         return self.counters[name]
 
     # ------------------------------------------------------------ devices
+    def auto_name(self, kind: str) -> str:
+        """Hand out the next free name for a station, the way a DHCP server
+        hands out addresses. Operators can rename a station afterwards."""
+        stem = {"sensor": "Sensor", "ap": "Router"}.get(kind)
+        if not stem:
+            return ""
+        taken = {d.get("name") for d in self.devices.values()}
+        while True:
+            n = self.next_counter("name_" + kind)
+            name = f"{stem} {n:02d}"
+            if name not in taken:
+                return name
+
     def seen_device(self, mac: str, kind: str, **info):
         d = self.devices.get(mac)
         if d is None:
@@ -109,6 +126,9 @@ class Store:
             self.mark()
         if kind == "sensor" and d["kind"] != "sensor":
             d["kind"] = "sensor"
+            self.mark()
+        if not d.get("name") and d["kind"] in ("sensor", "ap"):
+            d["name"] = self.auto_name(d["kind"])
             self.mark()
         d.update(info)
         d["last_seen"] = time.time()
@@ -143,6 +163,33 @@ class Store:
         p.update(lat=float(lat), lon=float(lon), acc=acc, updated=time.time())
         self.mark()
         return p
+
+    # -------------------------------------------------------------- alerts
+    ALERT_KINDS = {"found": "found someone", "help": "needs help",
+                   "hazard": "hazard", "note": "marked a spot"}
+
+    def add_alert(self, kind: str, lat: float, lon: float, text: str, person: str | None, hub: str) -> dict:
+        kind = kind if kind in self.ALERT_KINDS else "note"
+        who = self.people.get(person or "", {}).get("name", "Someone")
+        a = {"id": uuid.uuid4().hex[:8], "t": time.time(), "kind": kind,
+             "lat": float(lat), "lon": float(lon), "text": str(text or "")[:200],
+             "person": person, "who": who, "hub": hub, "status": "new"}
+        self.alerts.append(a)
+        del self.alerts[:-200]
+        self.mark()
+        return a
+
+    def set_alert(self, aid: str, status: str):
+        for a in self.alerts:
+            if a["id"] == aid:
+                a["status"] = status
+                self.mark()
+                return a
+        return None
+
+    def live_alerts(self, max_age: float = 6 * 3600) -> list:
+        now = time.time()
+        return [a for a in self.alerts if a["status"] != "cleared" and now - a["t"] < max_age]
 
     # --------------------------------------------------------------- log
     def append_log(self, ev: dict):

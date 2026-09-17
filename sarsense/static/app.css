@@ -80,7 +80,7 @@ nav .count { display: inline-block; min-width: 1.4em; padding: 0 5px; margin-lef
 nav .count:empty { display: none; }
 nav [data-tab="unknowns"] .count { background: var(--unknown); color: #fff; font-weight: 700; }
 nav .count.warn { background: var(--unknown); color: #fff; }
-nav button { min-height: 40px; }
+nav button { min-height: 40px; font-size: 15px; padding-left: 6px; padding-right: 6px; }
 .tab { padding: 12px 16px 24px; overflow-y: auto; flex: 1; }
 h3 { font-size: 15px; margin: 22px 0 8px; }
 .hint, .empty, .locked-note { color: var(--ink-2); font-size: 14px; margin: 6px 0 10px; }
@@ -220,3 +220,26 @@ dialog h3 { margin-top: 0; }
 .mk.st-offline { opacity: .45; outline: 2px dashed var(--unknown); outline-offset: 2px; }
 .mk-user { width: 16px; height: 16px; border-radius: 50%; background: var(--panel); border: 4px solid var(--known); }
 .mk-label.user { background: var(--known); color: #fff; font-size: 13px; }
+
+/* alerts raised by users */
+#alertbar { position: fixed; z-index: 700; top: max(96px, calc(env(safe-area-inset-top) + 84px)); left: 12px;
+  max-width: min(560px, calc(100vw - 24px)); display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border-radius: var(--radius-s); background: var(--unknown); color: #fff; font-weight: 700;
+  box-shadow: 0 2px 8px rgba(10,20,30,.3); }
+#alertbar .bang { flex: none; width: 24px; height: 24px; border-radius: 50%; background: #fff; color: var(--unknown);
+  display: grid; place-items: center; font-size: 17px; }
+#alertbar .grow { flex: 1; min-width: 0; font-weight: 400; }
+#alertbar button { background: transparent; color: inherit; border-color: rgba(255,255,255,.55); min-height: 34px; padding: 4px 10px; }
+#alertbar button.primary { background: #fff; color: var(--unknown); border-color: #fff; }
+.mk-alert { width: 26px; height: 26px; border-radius: 50%;
+  background: var(--unknown); border: 3px solid #fff; color: #fff; font-weight: 700; font-size: 17px;
+  display: grid; place-items: center; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+.mk-alert.acked { background: #D9A400; }
+.mk-label.alert { background: var(--unknown); color: #fff; }
+.rows li.alert-new strong { color: var(--unknown); }
+.leaflet-control-layers { border-radius: var(--radius-s); }
+
+@media (max-width: 760px) {
+  #alertbar { left: 8px; right: 8px; top: calc(env(safe-area-inset-top) + 66px); flex-wrap: wrap; }
+  #alertbar .grow { width: 100%; flex: none; }
+}

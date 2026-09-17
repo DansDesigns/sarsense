@@ -37,6 +37,7 @@ class Hub:
         self.upstream_ok = None
         self.packets = 0
         self.bad_packets = 0
+        self.blank_mac_warned = 0.0
         self.started = time.time()
         self.snapshot = {}
         self.snapshot_json = b"{}"
@@ -47,6 +48,15 @@ class Hub:
         msg = protocol.parse(data)
         if msg is None:
             self.bad_packets += 1
+            return
+        if msg.node == "00:00:00:00:00:00":
+            # a node that could not read its own MAC would otherwise be merged
+            # with every other broken node into one station
+            self.bad_packets += 1
+            if time.time() - self.blank_mac_warned > 60:
+                self.blank_mac_warned = time.time()
+                log.warning("a node at %s reports an all-zero MAC address and is being ignored; "
+                            "update its firmware", addr[0])
             return
         self.packets += 1
         if isinstance(msg, protocol.CsiFrame):
@@ -68,7 +78,8 @@ class Hub:
             peers = [msg.bssid] + [m for m, d in self.store.devices.items()
                                    if d["kind"] == "sensor" and d.get("bssid") == msg.bssid
                                    and m != msg.node]
-            transport.sendto(protocol.build_peers(peers), addr)
+            name = self.store.devices[msg.node].get("name", "")
+            transport.sendto(protocol.build_peers(peers, name), addr)
 
     # ------------------------------------------------------------ processing
     async def run(self):
@@ -91,7 +102,7 @@ class Hub:
         links = [l.summary(now) for l in self.links.links.values()]
         tracks = [t.public() for t in self.tracker.tracks.values()
                   if t.status in ("active", "lost") or now - t.last_seen < 1800]
-        remote_tracks, remote_devices = [], []
+        remote_tracks, remote_devices, remote_alerts = [], [], []
         for hid, r in list(self.remote.items()):
             if now - r["received"] > 60:
                 continue
@@ -100,6 +111,8 @@ class Hub:
                 remote_tracks.append(t)
             for d in r.get("devices", []):
                 remote_devices.append(dict(d, hub=hid))
+            for a in r.get("alerts", []):
+                remote_alerts.append(dict(a, hub=hid, remote=True))
         people = [dict(p, fresh=now - p.get("updated", 0) < self.cfg.responder_fresh)
                   for p in self.store.people.values()]
         counts = {"unknown": 0, "known": 0, "untagged": 0, "lost": 0}
@@ -114,6 +127,7 @@ class Hub:
             "remote_devices": remote_devices,
             "links": links, "tracks": tracks, "remote_tracks": remote_tracks,
             "people": people, "zones": list(self.store.zones.values()),
+            "alerts": self.store.live_alerts() + remote_alerts,
             "events": self.tracker.events[-60:], "counts": counts,
             "view": self.store.view,
             "stats": {"packets": self.packets, "bad": self.bad_packets,
@@ -140,6 +154,7 @@ class Hub:
                        if t.status in ("active", "lost")],
             "devices": [d for d in self.store.devices.values() if d.get("lat") is not None],
             "people": list(self.store.people.values()),
+            "alerts": self.store.live_alerts(),
         }
 
     def _merge_people(self, people):
