@@ -1,4 +1,5 @@
 # SARSense node for the Arduino IDE
+Dedicated to Noah Woods & all missing children, I hope this helps bring you home.
 
 Same behaviour and packet format as the ESP-IDF version, so both kinds of node can be mixed on one hub.
 

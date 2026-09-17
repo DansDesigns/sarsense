@@ -8,7 +8,7 @@ Wi-Fi sensing for search and rescue. Cheap ESP32 boards listen to how Wi-Fi sign
 
 People found inside a **tagging zone** get an anonymous ID like `U007`. Responders who register on their phone show up by name instead, so a volunteer walking the area is not mistaken for a missing person.
 
-It builds on the ideas in TOMMY (ESP32 CSI presence sensing), the Raspberry Pi Nexmon write-up (correlation-based motion score), the presence-detection CNN work, and the CMU DensePose-from-Wi-Fi paper. That last one needs lab radios and a GPU, so it is out of reach here. What you get is presence, a coarse position (metres, not centimetres) and a "possibly breathing" flag.
+What you get is presence, a coarse position (metres, not centimetres) and a "possibly breathing" flag. See [Attributions & Inspiration](#attributions--inspiration) for the projects and research it builds on.
 
 ## What runs where
 
@@ -220,4 +220,26 @@ run_hub.* run_demo.* start a hub, or a hub plus the simulator
 
 Map tiles are OpenStreetMap, cached on the hub as they are viewed so they keep working offline. Please don't bulk-download OSM tiles; for large offline areas render your own and drop them into `<data_dir>/tiles/z/x/y.png`.
 
-Licences: Leaflet (BSD-2-Clause) and Atkinson Hyperlegible (SIL OFL) are included with their licence files.
+## Attributions & Inspiration
+
+SARSense builds on the ideas in TOMMY (ESP32 CSI presence sensing), the Raspberry Pi Nexmon write-up (correlation-based motion score), the presence-detection CNN work, and the CMU DensePose-from-Wi-Fi paper. That last one needs lab radios and a GPU, so it is out of reach here.
+
+| Source | What SARSense took from it |
+|---|---|
+| [TOMMY](https://www.tommysense.com/) | The overall design: cheap ESP32 boards as transmitter and receiver pairs, and using ESP32-C5/C6 boards to pick up people who are standing or lying still |
+| [Wi-Fi sensing via Raspberry Pi](https://www.hackster.io/mzakharo/wifi-sensing-via-raspberry-pi-ff1087) by mzakharo | The movement score in `sarsense/dsp.py` (correlation between consecutive CSI frames), and the idea of supporting Raspberry Pi nodes through Nexmon |
+| [presence_detection_cnn](https://github.com/bigtreeyanger/presence_detection_cnn) by bigtreeyanger | Detecting human presence from CSI. SARSense uses simpler signal processing so it runs on a 512 MB board, and the detection pipeline can be swapped for a learnt model later |
+| [3D_wifi_scanner](https://github.com/Neumi/3D_wifi_scanner) by Neumi | Mapping Wi-Fi signals through a space as a way to see what they reveal about their surroundings |
+| [Scientists are getting eerily good at using Wi-Fi to "see" people through walls](https://www.vice.com/en/article/scientists-are-getting-eerily-good-at-using-wifi-to-see-people-through-walls-in-detail/) (Vice) | Background on the Carnegie Mellon research that started this project |
+| [DensePose](http://densepose.org/) and [DensePose From WiFi](https://arxiv.org/abs/2301.00250) by Jiaqi Geng, Dong Huang and Fernando De la Torre (Carnegie Mellon University) | Showed that Wi-Fi alone can recover detailed human pose. Out of reach on this hardware, but the reason for trying |
+
+### Built with
+
+- [nexmon_csi](https://github.com/seemoo-lab/nexmon_csi) by the Secure Mobile Networking Lab, TU Darmstadt, for CSI on Raspberry Pi (`tools/nexmon_forward.py`)
+- [ESP-IDF](https://github.com/espressif/esp-idf) and [Arduino core for ESP32](https://github.com/espressif/arduino-esp32) by Espressif, for the sensor node firmware
+- [Leaflet](https://leafletjs.com/) (BSD-2-Clause) for the map
+- [Atkinson Hyperlegible](https://www.brailleinstitute.org/freefont/) by the Braille Institute (SIL OFL) for the web app font
+- Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors
+- [NumPy](https://numpy.org/) for the signal processing
+
+Leaflet and Atkinson Hyperlegible are included with their licence files in `sarsense/static/vendor`.
